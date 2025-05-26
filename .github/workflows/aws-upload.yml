@@ -22,9 +22,14 @@ jobs:
     - name: Build
       run: dotnet build --configuration Release --no-restore
         
+    - name: Debug S3 Arguments
+      run: |
+        echo "BUCKET: ${{ secrets.AWS_S3_BUCKET }}"
+        echo "PREFIX: ${{ secrets.AWS_S3_KEY_PREFIX }}"
+        
     - name: Upload to S3
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         AWS_REGION: ${{ secrets.AWS_REGION }}
-      run: dotnet run --project AwsS3Uploader.Core/AwsS3Uploader.Core.csproj --configuration Release -- . ${{ secrets.AWS_S3_BUCKET }} ${{ secrets.AWS_S3_KEY_PREFIX }}
+      run: dotnet run --project AwsS3Uploader.Core/AwsS3Uploader.Core.csproj --configuration Release -- . "${{ secrets.AWS_S3_BUCKET }}" "${{ secrets.AWS_S3_KEY_PREFIX || 'github-uploads' }}"

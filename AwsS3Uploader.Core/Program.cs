@@ -13,15 +13,15 @@ namespace AwsS3Uploader.Core
         static async Task Main(string[] args)
         {
             // Validate arguments
-            if (args.Length < 3)
+            if (args.Length < 2)
             {
-                Console.WriteLine("Usage: AwsS3Uploader.Core <sourceDirectory> <bucketName> <s3KeyPrefix>");
+                Console.WriteLine("Usage: AwsS3Uploader.Core <sourceDirectory> <bucketName> [s3KeyPrefix]");
                 return;
             }
 
             string sourceDirectory = args[0];
             string bucketName = args[1];
-            string s3KeyPrefix = args[2];
+            string s3KeyPrefix = args.Length > 2 ? args[2] : "";
 
             // Load configuration
             var config = new ConfigurationBuilder()
@@ -82,8 +82,8 @@ namespace AwsS3Uploader.Core
             foreach (var filePath in Directory.GetFiles(directoryPath))
             {
                 string fileName = Path.GetFileName(filePath);
-                string keyName = string.IsNullOrEmpty(s3KeyPrefix) 
-                    ? fileName 
+                string keyName = string.IsNullOrEmpty(s3KeyPrefix)
+                    ? fileName
                     : $"{s3KeyPrefix.TrimEnd('/')}/{fileName}";
 
                 Console.WriteLine($"Uploading {fileName} to {keyName}");
@@ -95,8 +95,8 @@ namespace AwsS3Uploader.Core
             foreach (var subDirectoryPath in Directory.GetDirectories(directoryPath))
             {
                 string subDirectoryName = Path.GetFileName(subDirectoryPath);
-                string subKeyPrefix = string.IsNullOrEmpty(s3KeyPrefix) 
-                    ? subDirectoryName 
+                string subKeyPrefix = string.IsNullOrEmpty(s3KeyPrefix)
+                    ? subDirectoryName
                     : $"{s3KeyPrefix.TrimEnd('/')}/{subDirectoryName}";
 
                 await UploadDirectoryAsync(transferUtility, subDirectoryPath, bucketName, subKeyPrefix);
