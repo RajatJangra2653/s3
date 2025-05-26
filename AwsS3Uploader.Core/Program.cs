@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Amazon;
 using Amazon.S3;
@@ -51,24 +52,44 @@ namespace AwsS3Uploader.Core
                     awsSecretKey,
                     RegionEndpoint.GetBySystemName(awsRegion));
 
-                // Delete files from S3 if deletedFilesList is provided
-                if (!string.IsNullOrEmpty(deletedFilesList) && File.Exists(deletedFilesList))
+                // 1. Build set of all local files (relative to sourceDirectory)
+                var localFiles = Directory.GetFiles(sourceDirectory, "*", SearchOption.AllDirectories)
+                    .Select(f => Path.GetRelativePath(sourceDirectory, f).Replace("\\", "/"))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                // 2. List all S3 objects under the prefix
+                var s3Keys = new List<string>();
+                string? continuationToken = null;
+                do
                 {
-                    var deletedFiles = File.ReadAllLines(deletedFilesList);
-                    foreach (var relativePath in deletedFiles)
+                    var request = new Amazon.S3.Model.ListObjectsV2Request
                     {
-                        if (string.IsNullOrWhiteSpace(relativePath)) continue;
-                        string keyName = string.IsNullOrEmpty(s3KeyPrefix)
-                            ? relativePath.Replace("\\", "/")
-                            : $"{s3KeyPrefix.TrimEnd('/')}/{relativePath.Replace("\\", "/")}";
-                        Console.WriteLine($"Deleting {keyName} from S3");
+                        BucketName = bucketName,
+                        Prefix = string.IsNullOrEmpty(s3KeyPrefix) ? null : s3KeyPrefix.TrimEnd('/') + "/",
+                        ContinuationToken = continuationToken
+                    };
+                    var response = await s3Client.ListObjectsV2Async(request);
+                    s3Keys.AddRange(response.S3Objects.Select(o => o.Key));
+                    continuationToken = response.IsTruncated ? response.NextContinuationToken : null;
+                } while (continuationToken != null);
+
+                // 3. Delete S3 objects not present in localFiles
+                foreach (var s3Key in s3Keys)
+                {
+                    // Compute the relative path for comparison
+                    string relativePath = string.IsNullOrEmpty(s3KeyPrefix)
+                        ? s3Key
+                        : s3Key.Substring(s3KeyPrefix.TrimEnd('/').Length + 1);
+                    if (!localFiles.Contains(relativePath))
+                    {
+                        Console.WriteLine($"Deleting {s3Key} from S3 (not present locally)");
                         try
                         {
-                            await s3Client.DeleteObjectAsync(bucketName, keyName);
+                            await s3Client.DeleteObjectAsync(bucketName, s3Key);
                         }
                         catch (Exception ex)
                         {
-                            Console.WriteLine($"Failed to delete {keyName}: {ex.Message}");
+                            Console.WriteLine($"Failed to delete {s3Key}: {ex.Message}");
                         }
                     }
                 }
