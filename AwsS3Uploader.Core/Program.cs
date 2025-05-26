@@ -15,13 +15,14 @@ namespace AwsS3Uploader.Core
             // Validate arguments
             if (args.Length < 2)
             {
-                Console.WriteLine("Usage: AwsS3Uploader.Core <sourceDirectory> <bucketName> [s3KeyPrefix]");
+                Console.WriteLine("Usage: AwsS3Uploader.Core <sourceDirectory> <bucketName> [s3KeyPrefix] [deletedFilesList]");
                 return;
             }
 
             string sourceDirectory = args[0];
             string bucketName = args[1];
             string s3KeyPrefix = args.Length > 2 ? args[2] : "";
+            string deletedFilesList = args.Length > 3 ? args[3] : string.Empty;
 
             // Load configuration
             var config = new ConfigurationBuilder()
@@ -49,6 +50,28 @@ namespace AwsS3Uploader.Core
                     awsAccessKey,
                     awsSecretKey,
                     RegionEndpoint.GetBySystemName(awsRegion));
+
+                // Delete files from S3 if deletedFilesList is provided
+                if (!string.IsNullOrEmpty(deletedFilesList) && File.Exists(deletedFilesList))
+                {
+                    var deletedFiles = File.ReadAllLines(deletedFilesList);
+                    foreach (var relativePath in deletedFiles)
+                    {
+                        if (string.IsNullOrWhiteSpace(relativePath)) continue;
+                        string keyName = string.IsNullOrEmpty(s3KeyPrefix)
+                            ? relativePath.Replace("\\", "/")
+                            : $"{s3KeyPrefix.TrimEnd('/')}/{relativePath.Replace("\\", "/")}";
+                        Console.WriteLine($"Deleting {keyName} from S3");
+                        try
+                        {
+                            await s3Client.DeleteObjectAsync(bucketName, keyName);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Failed to delete {keyName}: {ex.Message}");
+                        }
+                    }
+                }
 
                 // Create transfer utility
                 var transferUtility = new TransferUtility(s3Client);
